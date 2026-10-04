@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import SearchBar from './components/SearchBar';
 import StatusFilter from './components/StatusFilter';
 import TaskTable from './components/TaskTable';
@@ -8,6 +8,10 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
+
+   useEffect(() => {
+    setPage(1);
+  }, [query, status]);
 
   const { tasks, total, loading, error } = useTasks(query, status, page, 10);
 

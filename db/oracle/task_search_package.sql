@@ -3,77 +3,92 @@
 -- It mirrors the logic used by the Spring Data repository and is
 -- representative of the kind of Oracle PL/SQL found in production.
 
-CREATE OR REPLACE PACKAGE task_search_pkg AS
+create or replace package task_search_pkg as
+   type task_record is record (
+         id          number,
+         title       varchar2(255),
+         description varchar2(1000),
+         status      varchar2(20),
+         priority    varchar2(10),
+         assignee    varchar2(100),
+         created_at  timestamp
+   );
+   type task_cursor is ref cursor return task_record;
+   procedure search_tasks (
+      p_search_term in varchar2 default null,
+      p_status      in varchar2 default null,
+      p_page        in number default 1,
+      p_page_size   in number default 10,
+      p_results     out task_cursor,
+      p_total_count out number
+   );
 
-    TYPE task_record IS RECORD (
-        id          NUMBER,
-        title       VARCHAR2(255),
-        description VARCHAR2(1000),
-        status      VARCHAR2(20),
-        priority    VARCHAR2(10),
-        assignee    VARCHAR2(100),
-        created_at  TIMESTAMP
-    );
-
-    TYPE task_cursor IS REF CURSOR RETURN task_record;
-
-    PROCEDURE search_tasks(
-        p_search_term IN  VARCHAR2 DEFAULT NULL,
-        p_status      IN  VARCHAR2 DEFAULT NULL,
-        p_page        IN  NUMBER   DEFAULT 1,
-        p_page_size   IN  NUMBER   DEFAULT 10,
-        p_results     OUT task_cursor,
-        p_total_count OUT NUMBER
-    );
-
-END task_search_pkg;
+end task_search_pkg;
 /
 
-CREATE OR REPLACE PACKAGE BODY task_search_pkg AS
+create or replace package body task_search_pkg as
 
-    PROCEDURE search_tasks(
-        p_search_term IN  VARCHAR2 DEFAULT NULL,
-        p_status      IN  VARCHAR2 DEFAULT NULL,
-        p_page        IN  NUMBER   DEFAULT 1,
-        p_page_size   IN  NUMBER   DEFAULT 10,
-        p_results     OUT task_cursor,
-        p_total_count OUT NUMBER
-    ) IS
-        v_term   VARCHAR2(257);
-        v_offset NUMBER;
-    BEGIN
-        v_term   := '%' || LOWER(NVL(p_search_term, '')) || '%';
-        v_offset := (p_page - 1) * p_page_size;
+   procedure search_tasks (
+      p_search_term in varchar2 default null,
+      p_status      in varchar2 default null,
+      p_page        in number default 1,
+      p_page_size   in number default 10,
+      p_results     out task_cursor,
+      p_total_count out number
+   ) is
+      v_term   varchar2(257);
+      v_offset number;
+   begin
+      v_term := '%'
+                || lower(nvl(
+         p_search_term,
+         ''
+      ))
+                || '%';
+      v_offset := ( p_page - 1 ) * p_page_size;
 
         -- Total count for pagination metadata
-        SELECT COUNT(*)
-          INTO p_total_count
-          FROM tasks
-         WHERE archived = 0
-           AND LOWER(title) LIKE v_term
-            OR LOWER(description) LIKE v_term
-           AND (p_status IS NULL OR status = p_status);
+      select count(*)
+        into p_total_count
+        from tasks
+       where archived = 0
+         and ( lower(title) like v_term
+          or lower(description) like v_term )
+         and ( p_status is null
+          or status = p_status );
 
         -- Paginated results using ROWNUM (pre-12c pattern)
-        OPEN p_results FOR
-            SELECT id, title, description, status, priority, assignee, created_at
-              FROM (
-                  SELECT t.*, ROWNUM AS rn
-                    FROM (
-                        SELECT id, title, description, status, priority,
-                               assignee, created_at
-                          FROM tasks
-                         WHERE archived = 0
-                           AND LOWER(title) LIKE v_term
-                            OR LOWER(description) LIKE v_term
-                           AND (p_status IS NULL OR status = p_status)
-                         ORDER BY created_at DESC
-                    ) t
-                   WHERE ROWNUM <= v_offset + p_page_size
-              )
-             WHERE rn > v_offset;
+      open p_results for select id,
+                                title,
+                                description,
+                                status,
+                                priority,
+                                assignee,
+                                created_at
+        from (
+         select t.*,
+                rownum as rn
+           from (
+            select id,
+                   title,
+                   description,
+                   status,
+                   priority,
+                   assignee,
+                   created_at
+              from tasks
+             where archived = 0
+               and ( lower(title) like v_term
+                or lower(description) like v_term )
+               and ( p_status is null
+                or status = p_status )
+             order by created_at desc
+         ) t
+          where rownum <= v_offset + p_page_size
+      )
+       where rn > v_offset;
 
-    END search_tasks;
+   end search_tasks;
 
-END task_search_pkg;
+end task_search_pkg;
 /
